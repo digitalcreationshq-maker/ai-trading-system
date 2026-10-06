@@ -1,0 +1,33 @@
+#property strict
+#property version   "0.1.0"
+#property description "AI Trading System MT4 bridge - safe/research mode only."
+
+input bool EnableExecution = false;
+
+int OnInit()
+{
+   Print("AI Trading System MT4 bridge initialized. Execution=", EnableExecution);
+   Print("SAFE MODE: this build does not submit broker orders.");
+   return(INIT_SUCCEEDED);
+}
+
+void OnTick()
+{
+   // Initial phase: heartbeat/read-only boundary only.
+   // No OrderSend/OrderClose/OrderModify calls are permitted in this build.
+   static datetime last_heartbeat = 0;
+   datetime now = TimeCurrent();
+
+   if(now - last_heartbeat >= 60)
+   {
+      last_heartbeat = now;
+      Print("AI Trading System MT4 heartbeat | account=", AccountNumber(),
+            " | server=", AccountServer(),
+            " | trade_allowed=", IsTradeAllowed());
+   }
+}
+
+void OnDeinit(const int reason)
+{
+   Print("AI Trading System MT4 bridge stopped. reason=", reason);
+}
