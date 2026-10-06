@@ -1,6 +1,12 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Iterable
+from zoneinfo import ZoneInfo
+
+
+DUKASCOPY_TZ = ZoneInfo("Europe/Zurich")
+FX_SYMBOLS = {"EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "NZDUSD", "USDCAD"}
+DAILY_BREAK_SYMBOLS = {"XAUUSD", "XAGUSD"}
 
 
 @dataclass(frozen=True)
@@ -30,29 +36,59 @@ class DataQualityReport:
     reasons: tuple[str, ...]
 
 
-def _infer_expected_h1_count(rows: list[Candle]) -> int:
-    """Infer an H1 expectation only when the sample spans at least one full day."""
+def _is_expected_h1_timestamp(timestamp: datetime, symbol: str) -> bool:
+    """Return whether Dukascopy should normally have an H1 bar at this UTC timestamp.
+
+    Dukascopy documents FX as 24/5, opening Sunday at 21:00 GMT in summer /
+    22:00 GMT in winter and closing Friday at the same time. XAU/XAG have the
+    same weekly session plus a daily one-hour trading break.
+    """
+    if timestamp.tzinfo is None:
+        return False
+
+    local = timestamp.astimezone(DUKASCOPY_TZ)
+    weekday = local.weekday()
+    hour = local.hour
+
+    if weekday == 5:  # Saturday
+        return False
+    if weekday == 6:  # Sunday: session starts at 23:00 Zurich time.
+        return hour >= 23
+    if weekday == 4:  # Friday: session ends at 23:00 Zurich time.
+        return hour < 23
+
+    if symbol.upper() in DAILY_BREAK_SYMBOLS and hour == 23:
+        return False
+
+    return True
+
+
+def _expected_h1_timestamps(rows: list[Candle], symbol: str) -> list[datetime]:
     if not rows:
-        return 0
+        return []
 
     start = rows[0].timestamp
     end = rows[-1].timestamp
-
     if start.tzinfo is None or end.tzinfo is None:
-        return len(rows)
+        return []
 
-    # A short sample has no reliable basis for inferring a full-day expectation.
-    # Long historical datasets still receive the weekday-based completeness check.
-    if end - start < timedelta(days=1):
-        return len(rows)
+    cursor = start.replace(minute=0, second=0, microsecond=0)
+    end_hour = end.replace(minute=0, second=0, microsecond=0)
+    expected: list[datetime] = []
+    while cursor <= end_hour:
+        if _is_expected_h1_timestamp(cursor, symbol):
+            expected.append(cursor)
+        cursor += timedelta(hours=1)
+    return expected
 
-    total = 0
-    day = start.date()
-    while day <= end.date():
-        if day.weekday() < 5:
-            total += 24
-        day += timedelta(days=1)
-    return total
+
+def _infer_expected_h1_count(rows: list[Candle]) -> int:
+    """Infer session-aware H1 expectation from the row symbol."""
+    if not rows:
+        return 0
+    if rows[-1].timestamp - rows[0].timestamp < timedelta(days=1):
+        return len(rows)
+    return len(_expected_h1_timestamps(rows, rows[0].symbol))
 
 
 def validate_candles(
@@ -82,26 +118,31 @@ def validate_candles(
     duplicate_count = len(keys) - len(set(keys))
     duplicate_pct = (duplicate_count / len(rows) * 100) if rows else 100.0
 
-    inferred_expected = (
-        _infer_expected_h1_count(rows) if timeframe_minutes == 60 else len(rows)
-    )
-    effective_expected = (
-        expected_count if expected_count is not None else inferred_expected
-    )
+    if timeframe_minutes == 60 and rows and rows[0].timestamp.tzinfo is not None:
+        expected_timestamps = _expected_h1_timestamps(rows, rows[0].symbol)
+        inferred_expected = len(expected_timestamps)
+        expected_set = set(expected_timestamps)
+        observed_set = {c.timestamp for c in rows}
+        missing_expected = sorted(expected_set - observed_set)
+        gap_count = 0
+        largest_gap_minutes = 0
+        if missing_expected:
+            previous = None
+            for missing in missing_expected:
+                if previous is None or missing - previous > timedelta(hours=1):
+                    gap_count += 1
+                previous = missing
+            largest_gap_minutes = len(missing_expected) * timeframe_minutes
+    else:
+        inferred_expected = len(rows)
+        missing_expected = []
+        gap_count = 0
+        largest_gap_minutes = 0
+
+    effective_expected = expected_count if expected_count is not None else inferred_expected
     completeness_pct = (
         (len(rows) / effective_expected * 100) if effective_expected else 0.0
     )
-
-    gap_count = 0
-    largest_gap_minutes = 0
-    if len(rows) > 1:
-        for previous, current in zip(rows, rows[1:]):
-            delta_minutes = int(
-                (current.timestamp - previous.timestamp).total_seconds() / 60
-            )
-            if delta_minutes > timeframe_minutes:
-                gap_count += 1
-                largest_gap_minutes = max(largest_gap_minutes, delta_minutes)
 
     mapped_count = sum(
         1 for c in rows if mapped_symbols is None or c.symbol in mapped_symbols
