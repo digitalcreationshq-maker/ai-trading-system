@@ -46,6 +46,7 @@ def run_backtest(candles: list[Candle], manifest: DatasetManifest, *, config: Ba
         exit_price = next_candle.close
         exit_time = next_candle.timestamp
         exit_reason = "MAX_BARS"
+        held_bars = 1
         end_i = min(len(ordered), next_i + config.max_bars_in_trade)
         for future in ordered[next_i:end_i]:
             if signal.side == "BUY":
@@ -62,7 +63,10 @@ def run_backtest(candles: list[Candle], manifest: DatasetManifest, *, config: Ba
                 exit_price, exit_time, exit_reason = target, future.timestamp, "TARGET"
                 break
             exit_price, exit_time = future.close, future.timestamp
+            held_bars += 1
 
+        financing_cost = costs.financing_per_bar_per_unit * quantity * held_bars
+        total_cost += financing_cost
         gross_r = direction * (exit_price - entry) / risk_distance
         net_pnl = gross_r * risk_amount - total_cost
         net_r = net_pnl / risk_amount
