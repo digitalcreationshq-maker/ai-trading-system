@@ -1,6 +1,22 @@
 name: historical-research
 
-on: push
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "backend/app/backtest/**"
+      - "backend/app/data/quality.py"
+      - "backend/app/strategy/**"
+      - "backend/tests/**"
+      - "backend/pyproject.toml"
+      - "docs/PHASE_4.md"
+      - "docs/BACKTEST_SPEC.md"
+      - ".github/workflows/historical-research.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   historical-backtest:
@@ -15,12 +31,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install backend
         run: python -m pip install -e "./backend[test]"
@@ -34,10 +50,20 @@ jobs:
         run: python -m app.backtest.run_research research-data
 
       - name: Enforce Phase 4 evidence gate
-        run: python -c "import json; d=json.load(open('research-report.json', encoding='utf-8')); assert d['gates']['phase_4_verdict'] == 'PASS', 'Phase 4 verdict is not PASS'"
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("research-report.json").read_text(encoding="utf-8"))
+          verdict = report["gates"]["phase_4_verdict"]
+          print(json.dumps(report["gates"], indent=2))
+          if verdict != "PASS":
+              raise SystemExit(f"Phase 4 verdict is {verdict}; evidence gate remains blocked.")
+          PY
 
       - name: Upload Phase 4 evidence
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: phase-4-historical-research
