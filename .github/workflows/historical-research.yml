@@ -1,7 +1,5 @@
 name: historical-research
 
-# Phase 4 acquisition: rate-limit-safe downloader + cache
-
 on:
   push:
     branches: ["main"]
@@ -13,31 +11,29 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
       - name: Install backend
         run: python -m pip install -e "./backend[test]"
-      - name: Restore historical-data cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            research-data/*.csv
-            .dukascopy-cache
-          key: phase4-dukascopy-h1-2018-2026-${{ hashFiles('backend/app/backtest/download_historical.py') }}
-          restore-keys: |
-            phase4-dukascopy-h1-2018-2026-
+
       - name: Download real historical data with rate-limit protection
         run: python backend/app/backtest/download_historical.py
+
       - name: Run quality checks, baseline backtests and Monte Carlo
         env:
           PYTHONPATH: backend
         run: python -m app.backtest.run_research research-data
+
       - name: Enforce Phase 4 evidence gates
         run: grep -q '"phase_4_verdict": "PASS"' research-report.json
+
       - name: Upload historical research evidence
         if: always()
         uses: actions/upload-artifact@v4
