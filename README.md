@@ -1,10 +1,8 @@
 # AI Trading System
 
-Safety-first foundation for an AI-assisted MT5 trading system.
+Safety-first AI-assisted trading research and execution architecture for MT4/MT5.
 
-## Initial build boundary
-
-Research and validation only. Broker order placement is disabled by design.
+## Safety mode
 
 - orders_enabled=false
 - kill_switch=true
@@ -13,4 +11,11 @@ Research and validation only. Broker order placement is disabled by design.
 Mission: survival -> capital preservation -> consistency -> positive expectancy -> controlled scaling.
 
 ## Current build stage
-Phase 4 infrastructure is now present for versioned historical OHLCV loading, causal feature construction, conservative next-bar backtesting, explicit cost inputs, walk-forward window generation, and deterministic Monte Carlo diagnostics. Historical evidence gates remain BLOCKED until real datasets are ingested and threshold results are demonstrated.
+
+Phase 4 historical research is the active gate. The research workflow uses per-symbol historical acquisition with retry/backoff protection against provider rate limits, then runs data-quality, baseline, out-of-sample, walk-forward, and Monte Carlo evidence gates. Historical evidence remains BLOCKED until the machine-readable report proves `"phase_4_verdict": "PASS"`.
+
+The dashboard must not be promoted ahead of the Phase 4 gate.
+
+## Research data policy
+
+Historical downloads are treated as external-source acquisition, not evidence by themselves. A download failure, missing symbol, incomplete dataset, or failed quality check blocks the corresponding Phase 4 evidence gate. No quality threshold is weakened to accommodate missing data.
