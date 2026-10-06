@@ -4,7 +4,7 @@ from typing import Iterable
 from zoneinfo import ZoneInfo
 
 
-DUKASCOPY_TZ = ZoneInfo("Europe/Zurich")
+DUKASCOPY_SESSION_TZ = ZoneInfo("America/New_York")
 FX_SYMBOLS = {"EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "NZDUSD", "USDCAD"}
 DAILY_BREAK_SYMBOLS = {"XAUUSD", "XAGUSD"}
 
@@ -46,18 +46,18 @@ def _is_expected_h1_timestamp(timestamp: datetime, symbol: str) -> bool:
     if timestamp.tzinfo is None:
         return False
 
-    local = timestamp.astimezone(DUKASCOPY_TZ)
+    local = timestamp.astimezone(DUKASCOPY_SESSION_TZ)
     weekday = local.weekday()
-    hour = local.hour
+    settlement_utc_hour = 21 if local.dst() else 22
 
     if weekday == 5:  # Saturday
         return False
-    if weekday == 6:  # Sunday: session starts at 23:00 Zurich time.
-        return hour >= 23
-    if weekday == 4:  # Friday: session ends at 23:00 Zurich time.
-        return hour < 23
+    if weekday == 6:  # Sunday: session starts at New York settlement.
+        return timestamp.hour >= settlement_utc_hour
+    if weekday == 4:  # Friday: session ends at New York settlement.
+        return timestamp.hour < settlement_utc_hour
 
-    if symbol.upper() in DAILY_BREAK_SYMBOLS and hour == 23:
+    if symbol.upper() in DAILY_BREAK_SYMBOLS and timestamp.hour == settlement_utc_hour:
         return False
 
     return True
