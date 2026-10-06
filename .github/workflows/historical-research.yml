@@ -24,7 +24,7 @@ jobs:
           mkdir -p research-data
           for symbol in eurusd gbpusd usdjpy usdchf audusd nzdusd usdcad xauusd; do
             echo "Downloading $symbol H1 history..."
-            npx --yes dukascopy-node -i "$symbol" -from 2018-01-01 -to 2026-10-01 -t h1 -f csv -o research-data --batch-size 10 --batch-pause 1000
+            npx --yes dukascopy-node -i "$symbol" -from 2018-01-01 -to 2026-10-01 -t h1 -f csv -dir research-data --batch-size 10 --batch-pause 1000
           done
       - name: Run quality checks, baseline backtests and Monte Carlo
         env:
