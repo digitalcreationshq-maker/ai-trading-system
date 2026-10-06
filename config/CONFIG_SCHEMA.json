@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AI Trading System Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["system", "risk", "execution", "data", "universe", "authorization"],
+  "properties": {
+    "system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "mode"],
+      "properties": {
+        "version": {"type": "string"},
+        "mode": {"enum": ["research", "simulation", "demo", "live"]}
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["risk_per_trade_pct", "absolute_risk_ceiling_pct", "daily_loss_limit_pct", "weekly_loss_limit_pct", "max_total_open_risk_pct", "max_correlated_exposure_pct", "consecutive_loss_pause", "max_trades_per_day", "max_trades_per_week", "min_setup_score", "min_autonomous_score", "preferred_min_rr", "absolute_min_rr", "drawdown_suspension_pct"],
+      "properties": {
+        "risk_per_trade_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "absolute_risk_ceiling_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "daily_loss_limit_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+        "weekly_loss_limit_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+        "max_total_open_risk_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+        "max_correlated_exposure_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 100},
+        "consecutive_loss_pause": {"type": "integer", "minimum": 1},
+        "max_trades_per_day": {"type": "integer", "minimum": 1},
+        "max_trades_per_week": {"type": "integer", "minimum": 1},
+        "min_setup_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "min_autonomous_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "preferred_min_rr": {"type": "number", "exclusiveMinimum": 0},
+        "absolute_min_rr": {"type": "number", "exclusiveMinimum": 0},
+        "drawdown_suspension_pct": {"type": "number", "exclusiveMinimum": 0, "maximum": 100}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["orders_enabled", "kill_switch"],
+      "properties": {
+        "orders_enabled": {"type": "boolean"},
+        "kill_switch": {"type": "boolean"}
+      }
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_staleness_seconds"],
+      "properties": {
+        "max_staleness_seconds": {"type": "integer", "minimum": 1}
+      }
+    },
+    "universe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forex", "commodities"],
+      "properties": {
+        "forex": {"type": "array", "items": {"type": "string"}},
+        "commodities": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["explicit_live_authorization"],
+      "properties": {
+        "explicit_live_authorization": {"type": "boolean"}
+      }
+    }
+  }
+}
