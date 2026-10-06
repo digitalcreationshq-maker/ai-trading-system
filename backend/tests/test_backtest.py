@@ -30,6 +30,18 @@ def test_session_aware_quality_does_not_count_weekend_as_missing():
     assert report.gap_count == 0
 
 
+
+def test_session_calendar_follows_us_dst_not_europe_dst():
+    # 2026-03-20 is after US DST begins but before European DST begins.
+    # Dukascopy therefore settles at 21:00 UTC; 21:00 Friday is closed.
+    rows = [
+        make_candle(datetime(2026, 3, 20, 20, tzinfo=timezone.utc), 1.10),
+        make_candle(datetime(2026, 3, 22, 21, tzinfo=timezone.utc), 1.101),
+    ]
+    report = validate_candles(rows, mapped_symbols={"EURUSD"}, timeframe_minutes=60)
+    assert report.gap_count == 0
+    assert report.expected_count == 2
+
 def test_genuine_intraday_missing_h1_bar_is_detected():
     rows = [
         make_candle(datetime(2026, 1, 5, hour, tzinfo=timezone.utc), 1.10 + hour * 0.001)
