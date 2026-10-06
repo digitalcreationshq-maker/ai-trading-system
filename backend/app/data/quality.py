@@ -46,9 +46,13 @@ def _is_expected_h1_timestamp(timestamp: datetime, symbol: str) -> bool:
     if timestamp.tzinfo is None:
         return False
 
+    # Session boundaries are expressed in UTC, but the settlement time follows
+    # the New York DST calendar. Use UTC weekday/hour for the actual boundary;
+    # using the local New York weekday would incorrectly classify the first
+    # hours of Saturday/Monday around the UTC date boundary.
     local = timestamp.astimezone(DUKASCOPY_SESSION_TZ)
-    weekday = local.weekday()
     settlement_utc_hour = 21 if local.dst() else 22
+    weekday = timestamp.weekday()
 
     if weekday == 5:  # Saturday
         return False
