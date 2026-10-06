@@ -63,9 +63,7 @@ def test_flat_filler_candles_are_excluded_from_features_and_execution():
         candles.append(make_candle(start + timedelta(hours=i), price))
 
     flat_time = start + timedelta(hours=40)
-    candles.insert(
-        40,
-        Candle(
+    candles[40] = Candle(
             symbol="EURUSD",
             timestamp=flat_time,
             open=price,
@@ -73,8 +71,7 @@ def test_flat_filler_candles_are_excluded_from_features_and_execution():
             low=price,
             close=price,
             volume=0,
-        ),
-    )
+        )
 
     snapshots = build_snapshots(candles)
     assert all(snapshot.timestamp != flat_time for snapshot in snapshots)
