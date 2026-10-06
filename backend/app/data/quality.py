@@ -86,8 +86,6 @@ def _infer_expected_h1_count(rows: list[Candle]) -> int:
     """Infer session-aware H1 expectation from the row symbol."""
     if not rows:
         return 0
-    if rows[-1].timestamp - rows[0].timestamp < timedelta(days=1):
-        return len(rows)
     return len(_expected_h1_timestamps(rows, rows[0].symbol))
 
 
