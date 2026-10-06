@@ -22,7 +22,7 @@ def main() -> int:
     root = Path(sys.argv[1])
     reports = []
     for path in sorted(root.glob("*.csv")):
-        symbol = path.stem.upper()
+        symbol = path.name.split("-")[0].upper()
         candles = read_dukascopy_csv(path, symbol=symbol)
         quality = validate_candles(candles, mapped_symbols={symbol}, timeframe_minutes=60)
         dataset = {
