@@ -8,7 +8,7 @@ on:
 jobs:
   historical-backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,18 +19,19 @@ jobs:
           node-version: "20"
       - name: Install backend
         run: python -m pip install -e "./backend[test]"
-      - name: Download real historical data
+      - name: Download real historical data with retry protection
         run: |
           mkdir -p research-data
           for symbol in eurusd gbpusd usdjpy usdchf audusd nzdusd usdcad xauusd; do
             echo "Downloading $symbol H1 history..."
-            npx --yes dukascopy-node -i "$symbol" -from 2018-01-01 -to 2026-10-01 -t h1 -f csv -v -dir research-data --batch-size 10 --batch-pause 1000
+            npx --yes dukascopy-node               -i "$symbol"               -from 2018-01-01               -to 2026-10-01               -t h1               -f csv               -v               -dir research-data               --batch-size 5               --batch-pause 2000               --retries 5               --retry-pause 1000               --retry-on-empty
           done
       - name: Run quality checks, baseline backtests and Monte Carlo
         env:
           PYTHONPATH: backend
         run: python -m app.backtest.run_research research-data
       - name: Upload historical research evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: phase-4-historical-research
