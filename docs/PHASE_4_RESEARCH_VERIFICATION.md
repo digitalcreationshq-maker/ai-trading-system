@@ -1,0 +1,1 @@
+# Phase 4 research verification\n\nThis file exists only to trigger an auditable pull-request historical research run. No trading logic is changed.\n
