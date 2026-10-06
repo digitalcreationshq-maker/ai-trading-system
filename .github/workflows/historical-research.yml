@@ -1,40 +1,42 @@
 name: historical-research
 
-on:
-  push:
-    branches: ["main"]
-  workflow_dispatch:
+on: push
 
 jobs:
   historical-backtest:
+    name: Phase 4 historical evidence
     runs-on: ubuntu-latest
     timeout-minutes: 180
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
 
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
 
       - name: Install backend
         run: python -m pip install -e "./backend[test]"
 
-      - name: Download real historical data with rate-limit protection
+      - name: Download historical data with retry protection
         run: python backend/app/backtest/download_historical.py
 
-      - name: Run quality checks, baseline backtests and Monte Carlo
+      - name: Run Phase 4 research
         env:
           PYTHONPATH: backend
         run: python -m app.backtest.run_research research-data
 
-      - name: Enforce Phase 4 evidence gates
-        run: grep -q '"phase_4_verdict": "PASS"' research-report.json
+      - name: Enforce Phase 4 evidence gate
+        run: python -c "import json; d=json.load(open('research-report.json', encoding='utf-8')); assert d['gates']['phase_4_verdict'] == 'PASS', 'Phase 4 verdict is not PASS'"
 
-      - name: Upload historical research evidence
+      - name: Upload Phase 4 evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -45,3 +47,4 @@ jobs:
             research-data/download-failures.txt
             research-report.json
           retention-days: 14
+          if-no-files-found: warn
