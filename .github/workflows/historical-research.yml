@@ -1,5 +1,7 @@
 name: historical-research
 
+# Phase 4 acquisition: rate-limit-safe downloader + cache
+
 on:
   push:
     branches: ["main"]
