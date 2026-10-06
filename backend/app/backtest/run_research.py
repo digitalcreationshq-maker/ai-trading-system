@@ -13,6 +13,7 @@ from app.data.quality import validate_candles
 
 RISK_PCT = 0.5
 INITIAL_EQUITY = 10_000.0
+EXPECTED_SYMBOLS = {"EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "NZDUSD", "USDCAD", "XAUUSD"}
 COSTS = CostModel(
     spread_price=0.00005,
     slippage_price=0.00002,
@@ -114,10 +115,15 @@ def evaluate_validation(candles, manifest):
 
 def evaluate_gates(reports):
     quality_results = [r for r in reports if r["status"] != "BLOCKED"]
+    reported_symbols = {r["symbol"] for r in reports}
+    all_expected_symbols_present = reported_symbols == EXPECTED_SYMBOLS
     gate1 = {
-        "status": "PASS" if reports and not any(r["quality"]["passed"] is False for r in reports) else "BLOCKED",
+        "status": "PASS" if all_expected_symbols_present and reports and not any(r["quality"]["passed"] is False for r in reports) else "BLOCKED",
         "criteria": {
-            "all_datasets_pass_quality": not any(r["quality"]["passed"] is False for r in reports),
+            "all_expected_symbols_present": all_expected_symbols_present,
+            "expected_symbols": sorted(EXPECTED_SYMBOLS),
+            "reported_symbols": sorted(reported_symbols),
+            "all_datasets_pass_quality": all_expected_symbols_present and not any(r["quality"]["passed"] is False for r in reports),
             "duplicate_rate_max_pct": 0.01,
             "completeness_min_pct": 99.5,
             "invalid_timestamps": 0,
