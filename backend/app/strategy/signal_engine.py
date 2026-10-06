@@ -26,6 +26,11 @@ class SignalEngine:
             return None
         if snapshot.spread_points < 0:
             return None
+        # An upstream snapshot explicitly marked UNCERTAIN is a hard
+        # no-trade state; it must not be silently replaced by a fresh
+        # classification from the same feature set.
+        if snapshot.regime == "UNCERTAIN":
+            return None
 
         regime_result = classify_regime(snapshot)
         regime = regime_result.regime
@@ -43,7 +48,8 @@ class SignalEngine:
             return None
 
         risk_distance = snapshot.atr
-        reward_distance = risk_distance * max(self.min_rr, 1.5)
+        reward_multiple = max(self.min_rr, 1.5)
+        reward_distance = risk_distance * reward_multiple
 
         if side == "BUY":
             stop = snapshot.close - risk_distance
@@ -56,9 +62,10 @@ class SignalEngine:
         if denominator <= 0:
             return None
 
-        rr = abs(target - snapshot.close) / denominator
-        # Floating-point arithmetic can produce 1.4999999999999998 for
-        # an exact 1.5 R:R calculation; use a small numerical tolerance.
+        # The target and stop are constructed from the same risk distance,
+        # so calculate R:R from those distances rather than introducing
+        # avoidable floating-point cancellation.
+        rr = reward_distance / risk_distance
         if rr + 1e-9 < self.min_rr:
             return None
 
