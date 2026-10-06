@@ -53,6 +53,48 @@ def test_genuine_intraday_missing_h1_bar_is_detected():
     assert report.completeness_pct < 99.5
 
 
+
+def test_flat_filler_candles_are_excluded_from_features_and_execution():
+    start = datetime(2026, 1, 5, tzinfo=timezone.utc)
+    candles = []
+    price = 1.10
+    for i in range(80):
+        price += 0.004
+        candles.append(make_candle(start + timedelta(hours=i), price))
+
+    flat_time = start + timedelta(hours=40)
+    candles.insert(
+        40,
+        Candle(
+            symbol="EURUSD",
+            timestamp=flat_time,
+            open=price,
+            high=price,
+            low=price,
+            close=price,
+            volume=0,
+        ),
+    )
+
+    snapshots = build_snapshots(candles)
+    assert all(snapshot.timestamp != flat_time for snapshot in snapshots)
+
+    manifest = DatasetManifest(
+        dataset_id="EURUSD:H1:flat-filler",
+        version="test",
+        symbol="EURUSD",
+        timeframe="H1",
+        start=candles[0].timestamp,
+        end=candles[-1].timestamp,
+        candle_count=len(candles),
+        sha256="test",
+        source="unit-test",
+    )
+    report = run_backtest(candles, manifest)
+    assert report.trade_count > 0
+    assert all(trade.entry_time != flat_time for trade in report.trades)
+
+
 def test_backtest_features_produce_deterministic_regimes_and_trades():
     start = datetime(2026, 1, 5, tzinfo=timezone.utc)
     candles = []
