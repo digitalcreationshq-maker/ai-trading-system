@@ -43,14 +43,14 @@ def build_snapshots(
         vals = list(closes)
         atr = sum(trs) / len(trs)
         base = vals[-config.trend_period - 1]
-        trend = max(-100.0, min(100.0, ((c.close / base) - 1.0) * 1000.0))
+        trend = max(-100.0, min(100.0, ((c.close / base) - 1.0) * 10000.0))
         momentum_base = (
             vals[-config.momentum_period - 1]
             if len(vals) > config.momentum_period
             else base
         )
         momentum = max(
-            -100.0, min(100.0, ((c.close / momentum_base) - 1.0) * 1000.0)
+            -100.0, min(100.0, ((c.close / momentum_base) - 1.0) * 10000.0)
         )
         atr_pct = atr / c.close * 100.0
         volatility = max(0.0, min(100.0, atr_pct * 50.0))
