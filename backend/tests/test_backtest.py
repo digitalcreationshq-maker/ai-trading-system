@@ -46,7 +46,7 @@ def test_backtest_features_produce_deterministic_regimes_and_trades():
     candles = []
     price = 1.10
     for i in range(120):
-        price += 0.002
+        price += 0.006
         candles.append(make_candle(start + timedelta(hours=i), price))
 
     snapshots = build_snapshots(candles)
