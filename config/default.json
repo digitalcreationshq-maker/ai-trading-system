@@ -1,0 +1,26 @@
+{
+  "system": {"version": "0.1.0", "mode": "research"},
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "absolute_risk_ceiling_pct": 1.0,
+    "daily_loss_limit_pct": 2.0,
+    "weekly_loss_limit_pct": 5.0,
+    "max_total_open_risk_pct": 2.0,
+    "max_correlated_exposure_pct": 1.0,
+    "consecutive_loss_pause": 3,
+    "max_trades_per_day": 5,
+    "max_trades_per_week": 20,
+    "min_setup_score": 70,
+    "min_autonomous_score": 80,
+    "preferred_min_rr": 2.0,
+    "absolute_min_rr": 1.5,
+    "drawdown_suspension_pct": 10.0
+  },
+  "execution": {"orders_enabled": false, "kill_switch": true},
+  "data": {"max_staleness_seconds": 60},
+  "universe": {
+    "forex": ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "NZDUSD", "USDCAD"],
+    "commodities": ["XAUUSD", "XAGUSD", "WTI", "Brent"]
+  },
+  "authorization": {"explicit_live_authorization": false}
+}
