@@ -19,3 +19,5 @@ The dashboard must not be promoted ahead of the Phase 4 gate.
 ## Research data policy
 
 Historical downloads are treated as external-source acquisition, not evidence by themselves. A download failure, missing symbol, incomplete dataset, or failed quality check blocks the corresponding Phase 4 evidence gate. No quality threshold is weakened to accommodate missing data.
+
+<!-- Phase 4 workflow trigger -->
