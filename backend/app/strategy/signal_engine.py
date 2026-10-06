@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from .models import MarketSnapshot, Signal
+from .regime import classify_regime
 from .scoring import score_setup
 
 
@@ -23,12 +24,19 @@ class SignalEngine:
     def generate(self, snapshot: MarketSnapshot) -> Signal | None:
         if snapshot.close <= 0 or snapshot.atr <= 0:
             return None
-        if snapshot.regime == "UNCERTAIN":
-            return None
         if snapshot.spread_points < 0:
             return None
 
-        side = "BUY" if snapshot.trend_score > 0 and snapshot.momentum_score > 0 else "SELL"
+        regime_result = classify_regime(snapshot)
+        regime = regime_result.regime
+        if regime == "UNCERTAIN":
+            return None
+
+        side = (
+            "BUY"
+            if snapshot.trend_score > 0 and snapshot.momentum_score > 0
+            else "SELL"
+        )
         score = score_setup(snapshot, side)
 
         if score.score < self.min_score:
@@ -36,6 +44,7 @@ class SignalEngine:
 
         risk_distance = snapshot.atr
         reward_distance = risk_distance * max(self.min_rr, 1.5)
+
         if side == "BUY":
             stop = snapshot.close - risk_distance
             target = snapshot.close + reward_distance
@@ -43,8 +52,14 @@ class SignalEngine:
             stop = snapshot.close + risk_distance
             target = snapshot.close - reward_distance
 
-        rr = abs(target - snapshot.close) / abs(snapshot.close - stop)
-        if rr < self.min_rr:
+        denominator = abs(snapshot.close - stop)
+        if denominator <= 0:
+            return None
+
+        rr = abs(target - snapshot.close) / denominator
+        # Floating-point arithmetic can produce 1.4999999999999998 for
+        # an exact 1.5 R:R calculation; use a small numerical tolerance.
+        if rr + 1e-9 < self.min_rr:
             return None
 
         created = snapshot.timestamp
@@ -52,6 +67,13 @@ class SignalEngine:
         signal_id = (
             f"{self.strategy_version}:{snapshot.symbol}:{created.isoformat()}:"
             f"{side}:{snapshot.close:.10f}"
+        )
+
+        rationale = (
+            *score.reasons,
+            f"REGIME={regime}",
+            f"REGIME_CONFIDENCE={regime_result.confidence:.3f}",
+            *regime_result.rationale,
         )
 
         return Signal(
@@ -66,6 +88,6 @@ class SignalEngine:
             take_profit=target,
             risk_reward=rr,
             score=score.score,
-            regime=snapshot.regime,
-            rationale=score.reasons,
+            regime=regime,
+            rationale=rationale,
         )
