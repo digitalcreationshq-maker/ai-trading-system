@@ -52,8 +52,16 @@ def compact_report(report):
         "instrument_profit_concentration_pct": report.instrument_profit_concentration_pct,
         "largest_trade_profit_pct": report.largest_trade_profit_pct,
         "lookahead_violations": report.lookahead_violations,
+        "trades": [
+            {
+                "symbol": trade.symbol,
+                "exit_time": trade.exit_time.isoformat(),
+                "net_pnl": trade.net_pnl,
+                "net_r": trade.net_r,
+            }
+            for trade in report.trades
+        ],
     }
-
 
 def slice_candles(candles, start, end):
     return [c for c in candles if start <= c.timestamp < end]
@@ -113,17 +121,80 @@ def evaluate_validation(candles, manifest):
     }
 
 
+def _aggregate_baseline_metrics(quality_results):
+    trades = []
+    for result in quality_results:
+        trades.extend(result["backtest"].get("trades", []))
+    trades.sort(key=lambda trade: trade["exit_time"])
+
+    equity = INITIAL_EQUITY
+    peak = equity
+    max_dd = 0.0
+    scaled_pnl = []
+    monthly_profit = {}
+    instrument_profit = {}
+
+    for trade in trades:
+        risk_amount = equity * RISK_PCT / 100.0
+        pnl = trade["net_r"] * risk_amount
+        equity += pnl
+        peak = max(peak, equity)
+        max_dd = max(max_dd, (peak - equity) / peak * 100.0 if peak else 0.0)
+        scaled_pnl.append(pnl)
+
+        month = trade["exit_time"][:7]
+        monthly_profit[month] = monthly_profit.get(month, 0.0) + pnl
+        symbol = trade["symbol"]
+        instrument_profit[symbol] = instrument_profit.get(symbol, 0.0) + pnl
+
+    wins = [p for p in scaled_pnl if p > 0]
+    losses = [-p for p in scaled_pnl if p < 0]
+    gross_profit = sum(wins)
+    gross_loss = sum(losses)
+    total_profit = sum(scaled_pnl)
+    concentration_base = total_profit if total_profit > 0 else 0.0
+
+    return {
+        "trade_count": len(trades),
+        "expectancy_r": sum(t["net_r"] for t in trades) / len(trades) if trades else 0.0,
+        "profit_factor": gross_profit / gross_loss if gross_loss else (float("inf") if gross_profit else 0.0),
+        "max_drawdown_pct": max_dd,
+        "monthly_profit_concentration_pct": (
+            max(monthly_profit.values(), default=0.0) / concentration_base * 100.0
+            if concentration_base else 0.0
+        ),
+        "instrument_profit_concentration_pct": (
+            max(instrument_profit.values(), default=0.0) / concentration_base * 100.0
+            if concentration_base else 0.0
+        ),
+        "largest_trade_profit_pct": (
+            max(scaled_pnl, default=0.0) / concentration_base * 100.0
+            if concentration_base else 0.0
+        ),
+        "symbol_count": len(instrument_profit),
+        "total_profit": total_profit,
+    }
+
+
 def evaluate_gates(reports):
     quality_results = [r for r in reports if r["status"] != "BLOCKED"]
     reported_symbols = {r["symbol"] for r in reports}
     all_expected_symbols_present = reported_symbols == EXPECTED_SYMBOLS
+
     gate1 = {
-        "status": "PASS" if all_expected_symbols_present and reports and not any(r["quality"]["passed"] is False for r in reports) else "BLOCKED",
+        "status": "PASS" if (
+            all_expected_symbols_present
+            and reports
+            and not any(r["quality"]["passed"] is False for r in reports)
+        ) else "BLOCKED",
         "criteria": {
             "all_expected_symbols_present": all_expected_symbols_present,
             "expected_symbols": sorted(EXPECTED_SYMBOLS),
             "reported_symbols": sorted(reported_symbols),
-            "all_datasets_pass_quality": all_expected_symbols_present and not any(r["quality"]["passed"] is False for r in reports),
+            "all_datasets_pass_quality": (
+                all_expected_symbols_present
+                and not any(r["quality"]["passed"] is False for r in reports)
+            ),
             "duplicate_rate_max_pct": 0.01,
             "completeness_min_pct": 99.5,
             "invalid_timestamps": 0,
@@ -131,23 +202,38 @@ def evaluate_gates(reports):
         },
     }
 
-    baseline_pass = False
-    gate3_results = []
-    for r in quality_results:
-        b = r["backtest"]
-        checks = {
-            "trade_count": b["trade_count"] >= 300,
-            "positive_expectancy": b["expectancy_r"] > 0,
-            "profit_factor": b["profit_factor"] >= 1.20,
-            "max_drawdown": b["max_drawdown_pct"] <= 20.0,
-            "monthly_concentration": b["monthly_profit_concentration_pct"] <= 25.0,
-            "instrument_concentration": b["instrument_profit_concentration_pct"] <= 60.0,
-            "largest_trade_concentration": b["largest_trade_profit_pct"] <= 10.0,
-            "lookahead": b["lookahead_violations"] == 0,
-        }
-        gate3_results.append({"symbol": r["symbol"], "checks": checks})
-        baseline_pass = baseline_pass or all(checks.values())
-    gate3 = {"status": "PASS" if quality_results and baseline_pass else "BLOCKED", "results": gate3_results}
+    aggregate = _aggregate_baseline_metrics(quality_results)
+    gate3_checks = {
+        "trade_count": aggregate["trade_count"] >= 300,
+        "positive_expectancy": aggregate["expectancy_r"] > 0,
+        "profit_factor": aggregate["profit_factor"] >= 1.20,
+        "max_drawdown": aggregate["max_drawdown_pct"] <= 20.0,
+        "monthly_concentration": aggregate["monthly_profit_concentration_pct"] <= 25.0,
+        "instrument_concentration": aggregate["instrument_profit_concentration_pct"] <= 60.0,
+        "largest_trade_concentration": aggregate["largest_trade_profit_pct"] <= 10.0,
+        "lookahead": all(
+            r["backtest"]["lookahead_violations"] == 0 for r in quality_results
+        ),
+        "all_expected_symbols_in_baseline": aggregate["symbol_count"] == len(EXPECTED_SYMBOLS),
+    }
+    gate3 = {
+        "status": "PASS" if quality_results and all(gate3_checks.values()) else "BLOCKED",
+        "aggregate": aggregate,
+        "checks": gate3_checks,
+        "per_symbol": [
+            {
+                "symbol": r["symbol"],
+                "checks": {
+                    "trade_count": r["backtest"]["trade_count"] >= 300,
+                    "positive_expectancy": r["backtest"]["expectancy_r"] > 0,
+                    "profit_factor": r["backtest"]["profit_factor"] >= 1.20,
+                    "max_drawdown": r["backtest"]["max_drawdown_pct"] <= 20.0,
+                    "lookahead": r["backtest"]["lookahead_violations"] == 0,
+                },
+            }
+            for r in quality_results
+        ],
+    }
 
     gate8_results = []
     for r in quality_results:
@@ -164,19 +250,27 @@ def evaluate_gates(reports):
             "lookahead": r["backtest"]["lookahead_violations"] == 0,
         }
         gate8_results.append({"symbol": r["symbol"], "checks": checks})
+
     gate8 = {
-        "status": "PASS" if gate8_results and all(all(x["checks"].values()) for x in gate8_results) else "BLOCKED",
+        "status": (
+            "PASS"
+            if gate8_results and all(all(x["checks"].values()) for x in gate8_results)
+            else "BLOCKED"
+        ),
         "results": gate8_results,
     }
 
-    overall = "PASS" if all(g["status"] == "PASS" for g in (gate1, gate3, gate8)) else "BLOCKED"
+    overall = "PASS" if all(
+        g["status"] == "PASS"
+        for g in (gate1, gate3, gate8)
+    ) else "BLOCKED"
+
     return {
         "gate_1_data_integrity": gate1,
         "gate_3_baseline_strategy": gate3,
         "gate_8_backtesting_validation": gate8,
         "phase_4_verdict": overall,
     }
-
 
 def main() -> int:
     root = Path(sys.argv[1])
