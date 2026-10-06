@@ -31,12 +31,21 @@ class DataQualityReport:
 
 
 def _infer_expected_h1_count(rows: list[Candle]) -> int:
+    """Infer an H1 expectation only when the sample spans at least one full day."""
     if not rows:
         return 0
+
     start = rows[0].timestamp
     end = rows[-1].timestamp
+
     if start.tzinfo is None or end.tzinfo is None:
         return len(rows)
+
+    # A short sample has no reliable basis for inferring a full-day expectation.
+    # Long historical datasets still receive the weekday-based completeness check.
+    if end - start < timedelta(days=1):
+        return len(rows)
+
     total = 0
     day = start.date()
     while day <= end.date():
@@ -60,7 +69,11 @@ def validate_candles(
     invalid_timestamps = 0
 
     for c in rows:
-        if min(c.open, c.high, c.low, c.close) <= 0 or c.high < max(c.open, c.close) or c.low > min(c.open, c.close):
+        if (
+            min(c.open, c.high, c.low, c.close) <= 0
+            or c.high < max(c.open, c.close)
+            or c.low > min(c.open, c.close)
+        ):
             invalid_prices += 1
         if c.timestamp.tzinfo is None:
             invalid_timestamps += 1
@@ -69,20 +82,30 @@ def validate_candles(
     duplicate_count = len(keys) - len(set(keys))
     duplicate_pct = (duplicate_count / len(rows) * 100) if rows else 100.0
 
-    inferred_expected = _infer_expected_h1_count(rows) if timeframe_minutes == 60 else len(rows)
-    effective_expected = expected_count if expected_count is not None else inferred_expected
-    completeness_pct = (len(rows) / effective_expected * 100) if effective_expected else 0.0
+    inferred_expected = (
+        _infer_expected_h1_count(rows) if timeframe_minutes == 60 else len(rows)
+    )
+    effective_expected = (
+        expected_count if expected_count is not None else inferred_expected
+    )
+    completeness_pct = (
+        (len(rows) / effective_expected * 100) if effective_expected else 0.0
+    )
 
     gap_count = 0
     largest_gap_minutes = 0
     if len(rows) > 1:
         for previous, current in zip(rows, rows[1:]):
-            delta_minutes = int((current.timestamp - previous.timestamp).total_seconds() / 60)
+            delta_minutes = int(
+                (current.timestamp - previous.timestamp).total_seconds() / 60
+            )
             if delta_minutes > timeframe_minutes:
                 gap_count += 1
                 largest_gap_minutes = max(largest_gap_minutes, delta_minutes)
 
-    mapped_count = sum(1 for c in rows if mapped_symbols is None or c.symbol in mapped_symbols)
+    mapped_count = sum(
+        1 for c in rows if mapped_symbols is None or c.symbol in mapped_symbols
+    )
 
     if completeness_pct < 99.5:
         reasons.append("CANDLE_COMPLETENESS_BELOW_THRESHOLD")
